@@ -65,7 +65,7 @@ body.editing .nav-garden{opacity:.92}
 .footer{text-align:center;color:#bd94a8;font:italic 14px 'DM Serif Display',serif;padding:30px 0}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#8d6379;color:white;padding:10px 17px;border-radius:22px;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
-@media(max-width:620px){.topbar{padding:15px}.brand{font-size:18px}main{padding:0 14px 45px}.hero{padding-top:35px}.hero:before{left:5%}.hero:after{right:5%}.nav-garden{gap:17px 13px;padding-bottom:28px}.flower{width:94px;height:94px}.cloud{width:122px;height:70px}.butterfly{width:108px;height:94px}.butterfly:before,.butterfly:after{width:50px;height:68px}.section{padding:19px 16px}.field-grid,.custom-list{grid-template-columns:1fr}.section h2{font-size:24px}}
+.image-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}\n.image-card{background:#fffafd;border:1px solid #ecd9e2;border-radius:16px;padding:10px;overflow:hidden}\n.image-card img{display:block;width:100%;height:190px;object-fit:cover;border-radius:11px;background:#f8edf2}\n.image-card .image-caption{white-space:pre-wrap;line-height:1.7;margin:9px 2px 2px;color:#806778}\n.image-card .image-caption-input{margin-top:8px;min-height:60px}\n.image-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}\n.image-tools .action{padding:7px 12px;font-size:12px}\n.image-empty{color:#c2a8b5;font-style:italic;text-align:center;padding:18px}\n@media(max-width:620px){.topbar{padding:15px}.brand{font-size:18px}main{padding:0 14px 45px}.hero{padding-top:35px}.hero:before{left:5%}.hero:after{right:5%}.nav-garden{gap:17px 13px;padding-bottom:28px}.flower{width:94px;height:94px}.cloud{width:122px;height:70px}.butterfly{width:108px;height:94px}.butterfly:before,.butterfly:after{width:50px;height:68px}.section{padding:19px 16px}.field-grid,.custom-list{grid-template-columns:1fr}.section h2{font-size:24px}}
 </style>
 </head>
 <body>
@@ -93,6 +93,7 @@ body.editing .nav-garden{opacity:.92}
     <button class="shape-link flower" style="--shape:#f6e3b9" data-target="daily"><span>生活日常</span></button>
     <button class="shape-link butterfly" style="--shape:#f2d7dc" data-target="collection"><span>我的收藏</span></button>
     <button class="shape-link cloud" style="--shape:#e7e1f2" data-target="dreams"><span>未來願望</span></button>
+    <button class="shape-link flower" style="--shape:#f3dce8" data-target="photos"><span>圖片收藏</span></button>
   </nav>
 
   <section class="section" id="about">
@@ -161,6 +162,17 @@ body.editing .nav-garden{opacity:.92}
     <div class="display-only"><label>夢想與目標</label><div class="display-value" data-show="dreams"></div></div>
   </section>
 
+  <section class="section" id="photos">
+    <div class="section-head"><h2>My Little Gallery</h2><small>✧ 我的圖片收藏 ✧</small></div>
+    <div class="image-gallery" id="imageGallery"></div>
+    <p class="image-empty display-only" id="noImages">還沒有收藏圖片 ♡</p>
+    <div class="edit-only add-row" style="align-items:center">
+      <label class="action" for="imageUpload" style="cursor:pointer">＋ 新增圖片</label>
+      <input id="imageUpload" type="file" accept="image/*" multiple style="display:none">
+      <small>可一次選擇多張圖片；圖片會保存在目前瀏覽器中。</small>
+    </div>
+  </section>
+
   <section class="section" id="customSection">
     <div class="section-head"><h2>More About Me</h2><small>✧ 自訂專屬欄位 ✧</small></div>
     <div class="custom-list" id="customList"></div>
@@ -183,7 +195,70 @@ body.editing .nav-garden{opacity:.92}
 const $=(s,root=document)=>root.querySelector(s);
 const $$=(s,root=document)=>[...root.querySelectorAll(s)];
 const STORAGE='my-little-world-profile-v1';
+const IMAGE_META_STORAGE='my-little-world-images-v1';
+const IMAGE_DB='my-little-world-image-db';
 let customFields=[];
+let imageItems=[];
+let imageDb=null;
+
+function openImageDb(){
+ return new Promise((resolve,reject)=>{
+  if(!('indexedDB' in window)){reject(new Error('此瀏覽器不支援圖片儲存'));return}
+  const request=indexedDB.open(IMAGE_DB,1);
+  request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('images'))db.createObjectStore('images',{keyPath:'id'})};
+  request.onsuccess=()=>{imageDb=request.result;resolve(imageDb)};
+  request.onerror=()=>reject(request.error);
+ });
+}
+function imageTransaction(mode,action){
+ return new Promise((resolve,reject)=>{
+  const tx=imageDb.transaction('images',mode);
+  const store=tx.objectStore('images');
+  const request=action(store);
+  if(request){request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)}
+  else{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)}
+ });
+}
+function saveImageMeta(){localStorage.setItem(IMAGE_META_STORAGE,JSON.stringify(imageItems))}
+async function renderImages(){
+ const gallery=$('#imageGallery');gallery.innerHTML='';
+ for(const item of imageItems){
+  let record;
+  try{record=await imageTransaction('readonly',store=>store.get(item.id))}catch(e){}
+  if(!record)continue;
+  const card=document.createElement('article');card.className='image-card';
+  const img=document.createElement('img');img.src=URL.createObjectURL(record.blob);img.alt=item.caption||'收藏圖片';
+  const caption=document.createElement('p');caption.className='image-caption display-only';caption.textContent=item.caption||'未添加說明';
+  const captionInput=document.createElement('textarea');captionInput.className='image-caption-input edit-only';captionInput.placeholder='替這張圖片寫點說明……';captionInput.value=item.caption||'';
+  captionInput.addEventListener('change',()=>{item.caption=captionInput.value;saveImageMeta();caption.textContent=item.caption||'未添加說明'});
+  const tools=document.createElement('div');tools.className='image-tools edit-only';
+  const del=document.createElement('button');del.type='button';del.className='action danger';del.textContent='刪除圖片';
+  del.onclick=async()=>{if(!confirm('確定要刪除這張圖片嗎？'))return;await imageTransaction('readwrite',store=>store.delete(item.id));imageItems=imageItems.filter(x=>x.id!==item.id);saveImageMeta();renderImages()};
+  tools.append(del);card.append(img,caption,captionInput,tools);gallery.append(card);
+ }
+ $('#noImages').style.display=imageItems.length?'none':'block';
+}
+async function loadImages(){
+ try{
+  await openImageDb();
+  imageItems=JSON.parse(localStorage.getItem(IMAGE_META_STORAGE)||'[]');
+  await renderImages();
+ }catch(e){toast('圖片儲存初始化失敗，請更換瀏覽器再試')}
+}
+$('#imageUpload').addEventListener('change',async event=>{
+ const files=[...event.target.files||[]].filter(file=>file.type.startsWith('image/'));
+ if(!files.length)return;
+ try{
+  if(!imageDb)await openImageDb();
+  for(const file of files){
+   const id='img-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+   await imageTransaction('readwrite',store=>store.put({id,blob:file}));
+   imageItems.push({id,caption:file.name.replace(/\\.[^.]+$/,'')});
+  }
+  saveImageMeta();await renderImages();toast('圖片已新增 ♡');
+ }catch(e){toast('圖片儲存失敗，可能是瀏覽器空間不足')}
+ event.target.value='';
+});
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
 function getData(){const data={title:$('#titleInput').value,fields:{}};$$('[data-key]').forEach(el=>data.fields[el.dataset.key]=el.value);data.custom=customFields.map((f,i)=>({title:f.title,value:$('#custom-'+i)?.value??f.value??''}));return data}
 function save(show=true){localStorage.setItem(STORAGE,JSON.stringify(getData()));render();if(show)toast('已儲存 ♡')}
@@ -239,6 +314,7 @@ $('#exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(getData(),null,
 $('#resetBtn').onclick=()=>{if(confirm('確定要清空目前填寫的資料嗎？此動作無法復原。')){localStorage.removeItem(STORAGE);location.reload()}};
 try{const saved=JSON.parse(localStorage.getItem(STORAGE)||'null');if(saved){$('#titleInput').value=saved.title||'My Little World ♡';Object.entries(saved.fields||{}).forEach(([k,v])=>{const el=$(`[data-key="${k}"]`);if(el)el.value=v});customFields=saved.custom||[]}}catch(e){}
 render();
+loadImages();
 </script>
 </body>
 </html>
