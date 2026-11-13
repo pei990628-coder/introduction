@@ -68,12 +68,12 @@ body.editing .nav-garden{opacity:.92}
 @media(max-width:620px){.topbar{padding:15px}.brand{font-size:18px}main{padding:0 14px 45px}.hero{padding-top:35px}.hero:before{left:5%}.hero:after{right:5%}.nav-garden{gap:17px 13px;padding-bottom:28px}.flower{width:94px;height:94px}.cloud{width:122px;height:70px}.butterfly{width:108px;height:94px}.butterfly:before,.butterfly:after{width:50px;height:68px}.section{padding:19px 16px}.field-grid,.custom-list{grid-template-columns:1fr}.section h2{font-size:24px}}
 </style>
 </head>
-<body class="editing">
+<body>
 <header class="topbar">
   <div class="brand">♡ My Little World</div>
   <div class="mode-switch" aria-label="切換模式">
-    <button id="editMode" class="active" type="button">✎ 編輯</button>
-    <button id="viewMode" type="button">♡ 展示</button>
+    <button id="editMode" type="button">✎ 編輯</button>
+    <button id="viewMode" class="active" type="button">♡ 展示</button>
   </div>
 </header>
 <main>
@@ -203,8 +203,34 @@ function render(){
  $('#noCustom').style.display=customFields.length?'none':'block';
  document.body.classList.toggle('editing',document.body.classList.contains('editing'));
 }
-function switchMode(edit){document.body.classList.toggle('editing',edit);$('#editMode').classList.toggle('active',edit);$('#viewMode').classList.toggle('active',!edit);if(!edit){save(false);window.scrollTo({top:0,behavior:'smooth'})}}
-$('#editMode').onclick=()=>switchMode(true);$('#viewMode').onclick=()=>switchMode(false);
+const EDIT_PASSWORD = 'mili628user';
+
+function switchMode(edit){
+ if(edit){
+  document.body.classList.add('editing');
+  $('#editMode').classList.add('active');
+  $('#viewMode').classList.remove('active');
+ }else{
+  save(false);
+  document.body.classList.remove('editing');
+  $('#editMode').classList.remove('active');
+  $('#viewMode').classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+ }
+}
+
+$('#editMode').onclick=()=>{
+ if(document.body.classList.contains('editing')) return;
+ const password=window.prompt('請輸入編輯密碼 ♡');
+ if(password===null) return;
+ if(password===EDIT_PASSWORD){
+  switchMode(true);
+  toast('已進入編輯模式 ♡');
+ }else{
+  toast('密碼錯誤，無法進入編輯模式');
+ }
+};
+$('#viewMode').onclick=()=>switchMode(false);
 $$('.shape-link').forEach(btn=>btn.addEventListener('click',()=>$('#'+btn.dataset.target).scrollIntoView({behavior:'smooth',block:'start'})));
 $('#titleInput').addEventListener('input',()=>$('#heroTitle').textContent=$('#titleInput').value||'My Little World ♡');
 $('#addCustom').onclick=()=>{const title=$('#customTitle').value.trim();if(!title){toast('先替新欄位取個名字吧');return}customFields.push({title,value:''});$('#customTitle').value='';render();save(false)};
